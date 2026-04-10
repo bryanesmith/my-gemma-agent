@@ -32,11 +32,12 @@ type Message struct {
 }
 
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
-	Tools    []Tool    `json:"tools,omitempty"`
-	Format   string    `json:"format,omitempty"`
+	Model     string    `json:"model"`
+	Messages  []Message `json:"messages"`
+	Stream    bool      `json:"stream"`
+	Tools     []Tool    `json:"tools,omitempty"`
+	Format    string    `json:"format,omitempty"`
+	KeepAlive string    `json:"keep_alive,omitempty"`
 }
 
 type ChatResponse struct {

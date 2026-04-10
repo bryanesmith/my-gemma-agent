@@ -15,10 +15,11 @@ const ModelName = "gemma4:e4b"
 func Chat(messages []Message, jsonMode bool) (*Message, error) {
 	tools := GetAvailableTools()
 	req := ChatRequest{
-		Model:    ModelName,
-		Messages: messages,
-		Stream:   true,
-		Tools:    tools,
+		Model:     ModelName,
+		Messages:  messages,
+		Stream:    true,
+		Tools:     tools,
+		KeepAlive: "5m",
 	}
 	if jsonMode {
 		req.Format = "json"
