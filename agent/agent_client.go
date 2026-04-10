@@ -12,7 +12,7 @@ import (
 const OllamaURL = "http://localhost:11434/api/chat"
 const ModelName = "gemma4:e4b"
 
-func CallOllamaStreaming(messages []Message) (string, error) {
+func ChatStreaming(messages []Message) (string, error) {
 	req := ChatRequest{
 		Model:    ModelName,
 		Messages: messages,

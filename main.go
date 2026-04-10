@@ -41,7 +41,7 @@ func main() {
 		messages = append(messages, agent.Message{Role: "user", Content: input})
 
 		fmt.Print("Gemma: ")
-		response, err := agent.CallOllamaStreaming(messages)
+		response, err := agent.ChatStreaming(messages)
 		if err != nil {
 			log.Printf("Error calling Gemma: %v", err)
 			continue
