@@ -12,42 +12,51 @@ import (
 const OllamaURL = "http://localhost:11434/api/chat"
 const ModelName = "gemma4:e4b"
 
-func ChatStreaming(messages []Message) (string, error) {
+func Chat(messages []Message, jsonMode bool) (*Message, error) {
+	tools := GetAvailableTools()
 	req := ChatRequest{
 		Model:    ModelName,
 		Messages: messages,
 		Stream:   true,
+		Tools:    tools,
+	}
+	if jsonMode {
+		req.Format = "json"
 	}
 
 	reqBody, err := json.Marshal(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	spinner := NewSpinner()
 	spinner.Start("thinking...")
+	var firstToken = true
+	defer func() {
+		if firstToken {
+			spinner.Stop()
+		}
+	}()
 
 	resp, err := http.Post(OllamaURL, "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
-		spinner.Stop()
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
+	var message Message
+	message.Role = "assistant"
+
 	var fullResponse strings.Builder
 	decoder := json.NewDecoder(resp.Body)
-	firstToken := true
 
 	for {
 		var chunk ChatResponse
 		if err := decoder.Decode(&chunk); err != nil {
-			if firstToken {
-				spinner.Stop()
-			}
 			if err == io.EOF {
 				break
 			}
-			return "", err
+			return nil, err
 		}
 
 		if chunk.Message.Content != "" {
@@ -59,10 +68,36 @@ func ChatStreaming(messages []Message) (string, error) {
 			fullResponse.WriteString(chunk.Message.Content)
 		}
 
+		if chunk.Message.ToolCalls != nil {
+			message.ToolCalls = chunk.Message.ToolCalls
+		}
+
 		if chunk.Done {
 			break
 		}
 	}
 
-	return fullResponse.String(), nil
+	message.Content = fullResponse.String()
+
+	if jsonMode && message.Content != "" {
+		toolCalls, err := ParseToolCalls(message.Content)
+		if err == nil && len(toolCalls) > 0 {
+			message.ToolCalls = toolCalls
+			message.Content = ""
+		}
+	}
+
+	if !jsonMode && strings.Contains(message.Content, "{") {
+		jsonStr := ExtractJSON(message.Content)
+		if jsonStr != "" {
+			toolCalls, err := ParseToolCalls(jsonStr)
+			if err == nil && len(toolCalls) > 0 {
+				message.ToolCalls = toolCalls
+				message.Content = strings.Replace(message.Content, jsonStr, "", 1)
+				message.Content = strings.TrimSpace(message.Content)
+			}
+		}
+	}
+
+	return &message, nil
 }

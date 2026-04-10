@@ -33,21 +33,41 @@ func main() {
 			continue
 		}
 
-		if agent.IsDateQuery(input) {
-			fmt.Printf("Agent: Today's date is %s\n", agent.GetCurrentDate())
-			continue
-		}
-
 		messages = append(messages, agent.Message{Role: "user", Content: input})
 
 		fmt.Print("Gemma: ")
-		response, err := agent.ChatStreaming(messages)
+		response, err := agent.Chat(messages, true)
 		if err != nil {
 			log.Printf("Error calling Gemma: %v", err)
 			continue
 		}
 		fmt.Println()
-		messages = append(messages, agent.Message{Role: "assistant", Content: response})
+		messages = append(messages, *response)
+
+		if len(response.ToolCalls) > 0 {
+			for _, tc := range response.ToolCalls {
+				result, err := agent.ExecuteTool(tc.Function.Name, tc.Function.Arguments)
+				if err != nil {
+					log.Printf("Error executing tool %s: %v", tc.Function.Name, err)
+					continue
+				}
+				toolMsg := agent.Message{
+					Role:       "tool",
+					Content:    result,
+					ToolCallID: tc.ID,
+				}
+				messages = append(messages, toolMsg)
+			}
+
+			fmt.Print("Gemma: ")
+			finalResponse, err := agent.Chat(messages, false)
+			if err != nil {
+				log.Printf("Error calling Gemma: %v", err)
+				continue
+			}
+			fmt.Println()
+			messages = append(messages, *finalResponse)
+		}
 
 		if err := scanner.Err(); err != nil {
 			log.Printf("Input error: %v", err)
