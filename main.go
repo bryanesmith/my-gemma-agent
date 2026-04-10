@@ -2,129 +2,13 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"my-gemma-agent/agent"
 )
-
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
-}
-
-type ChatResponse struct {
-	Message Message `json:"message"`
-	Done    bool    `json:"done"`
-}
-
-func getCurrentDate() string {
-	return time.Now().Format("2006-01-02")
-}
-
-type Spinner struct {
-	frames []string
-	idx    int
-	stop   chan bool
-	done   chan bool
-}
-
-func NewSpinner() *Spinner {
-	return &Spinner{
-		frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-		stop:   make(chan bool),
-		done:   make(chan bool),
-	}
-}
-
-func (s *Spinner) Start(message string) {
-	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				fmt.Printf("\r%s %s", s.frames[s.idx], message)
-				s.idx = (s.idx + 1) % len(s.frames)
-			case <-s.stop:
-				fmt.Printf("\r%s\r", strings.Repeat(" ", len(message)+2))
-				s.done <- true
-				return
-			}
-		}
-	}()
-}
-
-func (s *Spinner) Stop() {
-	close(s.stop)
-	<-s.done
-}
-
-func callOllamaStreaming(messages []Message) (string, error) {
-	req := ChatRequest{
-		Model:    "gemma4:e4b",
-		Messages: messages,
-		Stream:   true,
-	}
-
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		return "", err
-	}
-
-	spinner := NewSpinner()
-	spinner.Start("thinking...")
-
-	resp, err := http.Post("http://localhost:11434/api/chat", "application/json", bytes.NewBuffer(reqBody))
-	if err != nil {
-		spinner.Stop()
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	var fullResponse strings.Builder
-	decoder := json.NewDecoder(resp.Body)
-	firstToken := true
-
-	for {
-		var chunk ChatResponse
-		if err := decoder.Decode(&chunk); err != nil {
-			if firstToken {
-				spinner.Stop()
-			}
-			if err == io.EOF {
-				break
-			}
-			return "", err
-		}
-
-		if chunk.Message.Content != "" {
-			if firstToken {
-				spinner.Stop()
-				firstToken = false
-			}
-			fmt.Print(chunk.Message.Content)
-			fullResponse.WriteString(chunk.Message.Content)
-		}
-
-		if chunk.Done {
-			break
-		}
-	}
-
-	return fullResponse.String(), nil
-}
 
 func main() {
 	fmt.Println("Gemma Agent Loop - Type 'quit' to exit")
@@ -132,7 +16,7 @@ func main() {
 	fmt.Println()
 
 	scanner := bufio.NewScanner(os.Stdin)
-	var messages []Message
+	var messages []agent.Message
 
 	for {
 		fmt.Print("You: ")
@@ -149,21 +33,21 @@ func main() {
 			continue
 		}
 
-		if strings.Contains(strings.ToLower(input), "date") || strings.Contains(strings.ToLower(input), "time") {
-			fmt.Printf("Agent: Today's date is %s\n", getCurrentDate())
+		if agent.IsDateQuery(input) {
+			fmt.Printf("Agent: Today's date is %s\n", agent.GetCurrentDate())
 			continue
 		}
 
-		messages = append(messages, Message{Role: "user", Content: input})
+		messages = append(messages, agent.Message{Role: "user", Content: input})
 
 		fmt.Print("Gemma: ")
-		response, err := callOllamaStreaming(messages)
+		response, err := agent.CallOllamaStreaming(messages)
 		if err != nil {
 			log.Printf("Error calling Gemma: %v", err)
 			continue
 		}
 		fmt.Println()
-		messages = append(messages, Message{Role: "assistant", Content: response})
+		messages = append(messages, agent.Message{Role: "assistant", Content: response})
 
 		if err := scanner.Err(); err != nil {
 			log.Printf("Input error: %v", err)
