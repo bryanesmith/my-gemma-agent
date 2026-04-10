@@ -79,23 +79,11 @@ func Chat(messages []Message, jsonMode bool) (*Message, error) {
 
 	message.Content = fullResponse.String()
 
-	if jsonMode && message.Content != "" {
+	if message.Content != "" {
 		toolCalls, err := ParseToolCalls(message.Content)
 		if err == nil && len(toolCalls) > 0 {
 			message.ToolCalls = toolCalls
 			message.Content = ""
-		}
-	}
-
-	if !jsonMode && strings.Contains(message.Content, "{") {
-		jsonStr := ExtractJSON(message.Content)
-		if jsonStr != "" {
-			toolCalls, err := ParseToolCalls(jsonStr)
-			if err == nil && len(toolCalls) > 0 {
-				message.ToolCalls = toolCalls
-				message.Content = strings.Replace(message.Content, jsonStr, "", 1)
-				message.Content = strings.TrimSpace(message.Content)
-			}
 		}
 	}
 

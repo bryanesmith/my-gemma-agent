@@ -18,6 +18,14 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	var messages []agent.Message
 
+	systemMsg := agent.Message{
+		Role: "system",
+		Content: `You are a helpful assistant with access to tools. 
+If you need to use a tool, respond with JSON: {"tool_calls": [{"function": "tool_name", "args": {}}]}
+If tool results are provided in the conversation, respond naturally with the answer.`,
+	}
+	messages = append(messages, systemMsg)
+
 	for {
 		fmt.Print("You: ")
 		if !scanner.Scan() {
@@ -44,7 +52,7 @@ func main() {
 		fmt.Println()
 		messages = append(messages, *response)
 
-		if len(response.ToolCalls) > 0 {
+		for len(response.ToolCalls) > 0 {
 			for _, tc := range response.ToolCalls {
 				result, err := agent.ExecuteTool(tc.Function.Name, tc.Function.Arguments)
 				if err != nil {
@@ -59,14 +67,19 @@ func main() {
 				messages = append(messages, toolMsg)
 			}
 
+			messages = append(messages, agent.Message{
+				Role:    "user",
+				Content: "Based on the tool results above, please provide a natural language answer.",
+			})
+
 			fmt.Print("Gemma: ")
-			finalResponse, err := agent.Chat(messages, false)
+			response, err = agent.Chat(messages, false)
 			if err != nil {
 				log.Printf("Error calling Gemma: %v", err)
-				continue
+				break
 			}
 			fmt.Println()
-			messages = append(messages, *finalResponse)
+			messages = append(messages, *response)
 		}
 
 		if err := scanner.Err(); err != nil {
