@@ -33,6 +33,44 @@ func getCurrentDate() string {
 	return time.Now().Format("2006-01-02")
 }
 
+type Spinner struct {
+	frames []string
+	idx    int
+	stop   chan bool
+	done   chan bool
+}
+
+func NewSpinner() *Spinner {
+	return &Spinner{
+		frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		stop:   make(chan bool),
+		done:   make(chan bool),
+	}
+}
+
+func (s *Spinner) Start(message string) {
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Printf("\r%s %s", s.frames[s.idx], message)
+				s.idx = (s.idx + 1) % len(s.frames)
+			case <-s.stop:
+				fmt.Printf("\r%s\r", strings.Repeat(" ", len(message)+2))
+				s.done <- true
+				return
+			}
+		}
+	}()
+}
+
+func (s *Spinner) Stop() {
+	close(s.stop)
+	<-s.done
+}
+
 func callOllamaStreaming(messages []Message) (string, error) {
 	req := ChatRequest{
 		Model:    "gemma4:e4b",
@@ -45,18 +83,26 @@ func callOllamaStreaming(messages []Message) (string, error) {
 		return "", err
 	}
 
+	spinner := NewSpinner()
+	spinner.Start("thinking...")
+
 	resp, err := http.Post("http://localhost:11434/api/chat", "application/json", bytes.NewBuffer(reqBody))
 	if err != nil {
+		spinner.Stop()
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	var fullResponse strings.Builder
 	decoder := json.NewDecoder(resp.Body)
+	firstToken := true
 
 	for {
 		var chunk ChatResponse
 		if err := decoder.Decode(&chunk); err != nil {
+			if firstToken {
+				spinner.Stop()
+			}
 			if err == io.EOF {
 				break
 			}
@@ -64,6 +110,10 @@ func callOllamaStreaming(messages []Message) (string, error) {
 		}
 
 		if chunk.Message.Content != "" {
+			if firstToken {
+				spinner.Stop()
+				firstToken = false
+			}
 			fmt.Print(chunk.Message.Content)
 			fullResponse.WriteString(chunk.Message.Content)
 		}
