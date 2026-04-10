@@ -54,6 +54,7 @@ If tool results are provided in the conversation, respond naturally with the ans
 
 		for len(response.ToolCalls) > 0 {
 			for _, tc := range response.ToolCalls {
+				fmt.Printf("Invoking tool: %s\n", tc.Function.Name)
 				result, err := agent.ExecuteTool(tc.Function.Name, tc.Function.Arguments)
 				if err != nil {
 					log.Printf("Error executing tool %s: %v", tc.Function.Name, err)

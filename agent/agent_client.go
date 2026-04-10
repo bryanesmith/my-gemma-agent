@@ -49,6 +49,8 @@ func Chat(messages []Message, jsonMode bool) (*Message, error) {
 
 	var fullResponse strings.Builder
 	decoder := json.NewDecoder(resp.Body)
+	var firstTokenBuffer strings.Builder
+	var isToolCall bool
 
 	for {
 		var chunk ChatResponse
@@ -63,9 +65,19 @@ func Chat(messages []Message, jsonMode bool) (*Message, error) {
 			if firstToken {
 				spinner.Stop()
 				firstToken = false
+				firstTokenBuffer.WriteString(chunk.Message.Content)
+				if strings.HasPrefix(strings.TrimSpace(firstTokenBuffer.String()), "{") {
+					isToolCall = true
+				} else {
+					fmt.Print(firstTokenBuffer.String())
+				}
+				fullResponse.WriteString(chunk.Message.Content)
+			} else if !isToolCall {
+				fmt.Print(chunk.Message.Content)
+				fullResponse.WriteString(chunk.Message.Content)
+			} else {
+				fullResponse.WriteString(chunk.Message.Content)
 			}
-			fmt.Print(chunk.Message.Content)
-			fullResponse.WriteString(chunk.Message.Content)
 		}
 
 		if chunk.Message.ToolCalls != nil {
